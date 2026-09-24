@@ -12,15 +12,15 @@ Bookmarklet-Overlay für die Notenübersicht im SAL-Schulportal (Sekundarschule 
 
 ## Bookmarklet
 
-1. `dashboard.js` unter einer **HTTPS**-URL hosten (GitHub Pages, eigenes Hosting, …).
-2. In `bookmarklet.txt` `https://YOUR_HOST/dashboard.js` durch deine URL ersetzen.
-3. Die komplette Zeile als Lesezeichen-URL speichern.
-4. Auf der SAL-Notenseite das Lesezeichen anklicken (erneut = Toggle).
+1. Lesezeichen mit der URL aus `bookmarklet.txt` anlegen (zeigt bereits auf Vercel).
+2. Auf der SAL-Notenseite das Lesezeichen anklicken (erneut = Toggle).
 
-Beispiel:
+Live:
+- Dashboard-Skript: https://sal-noten-dashboard.vercel.app/dashboard.js
+- Demo: https://sal-noten-dashboard.vercel.app/demo.html
 
 ```
-javascript:(function(){var s=document.createElement('script');s.src='https://YOUR_HOST/dashboard.js?t='+Date.now();s.async=true;document.body.appendChild(s);})();
+javascript:(function(){var s=document.createElement('script');s.src='https://sal-noten-dashboard.vercel.app/dashboard.js?t='+Date.now();s.async=true;document.body.appendChild(s);})();
 ```
 
 ## Berechnung (Zug E)
