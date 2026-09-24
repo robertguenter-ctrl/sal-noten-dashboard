@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAL Noten-Dashboard – Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #111; }
+    h1 { font-size: 1.25rem; }
+    table { border-collapse: collapse; width: min(560px, 100%); margin: 1rem 0 2rem; }
+    th, td { border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; }
+    th { background: #f3f4f6; }
+    button {
+      appearance: none; border: 0; background: #0f172a; color: #fff;
+      padding: .7rem 1rem; border-radius: 10px; cursor: pointer; font-weight: 600;
+    }
+    code { background: #f3f4f6; padding: .1rem .35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Demo: Notenübersicht (simuliertes SAL-HTML)</h1>
+  <p>Klicke den Button, um <code>dashboard.js</code> wie ein Bookmarklet zu laden.</p>
+  <button type="button" id="run">Dashboard laden / toggeln</button>
+
+  <table>
+    <thead>
+      <tr><th>Fach</th><th>Note</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Deutsch</td><td>5.0</td></tr>
+      <tr><td>Französisch</td><td>4.5</td></tr>
+      <tr><td>Englisch</td><td>5.5</td></tr>
+      <tr><td>Mathematik</td><td>4.5</td></tr>
+      <tr><td>Physik</td><td>5.0</td></tr>
+      <tr><td>Biologie</td><td>4.0</td></tr>
+      <tr><td>Sport</td><td>6.0</td></tr>
+      <tr><td>Musik</td><td>dispensiert</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    document.getElementById("run").addEventListener("click", function () {
+      var s = document.createElement("script");
+      s.src = "./dashboard.js?t=" + Date.now();
+      document.body.appendChild(s);
+    });
+  </script>
+</body>
+</html>
