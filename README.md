@@ -12,16 +12,17 @@ Bookmarklet-Overlay für die Notenübersicht im SAL-Schulportal (Sekundarschule 
 
 ## Bookmarklet
 
-1. Lesezeichen mit der URL aus `bookmarklet.txt` anlegen (zeigt bereits auf Vercel).
-2. Auf der SAL-Notenseite das Lesezeichen anklicken (erneut = Toggle).
+**Nicht** die `javascript:`-URL in die Chrome-Adresszeile einfügen (wird zur Google-Suche).
 
-Live:
-- Dashboard-Skript: https://sal-noten-dashboard.vercel.app/dashboard.js
+1. Öffne die Install-Seite: https://sal-noten-dashboard.vercel.app/install.html
+2. Ziehe den blauen Button in die Lesezeichen-Leiste
+3. Auf der SAL-Seite «Aktuelle Noten» das Lesezeichen anklicken
+
+Das Install-Bookmarklet enthält den Code **inline** (nötig, weil `portal.sbl.ch` externe Skripte oft per CSP blockiert).
+
+Weitere URLs:
 - Demo: https://sal-noten-dashboard.vercel.app/demo.html
-
-```
-javascript:(function(){var s=document.createElement('script');s.src='https://sal-noten-dashboard.vercel.app/dashboard.js?t='+Date.now();s.async=true;document.body.appendChild(s);})();
-```
+- Skript: https://sal-noten-dashboard.vercel.app/dashboard.js
 
 ## Berechnung (Zug E)
 

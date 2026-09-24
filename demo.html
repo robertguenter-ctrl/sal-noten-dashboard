@@ -3,38 +3,52 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SAL Noten-Dashboard – Demo</title>
+  <title>SAL Noten-Dashboard – Demo (Live-SAL Layout)</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 2rem; color: #111; }
     h1 { font-size: 1.25rem; }
-    table { border-collapse: collapse; width: min(560px, 100%); margin: 1rem 0 2rem; }
-    th, td { border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; }
+    table { border-collapse: collapse; width: min(720px, 100%); margin: 1rem 0 2rem; }
+    th, td { border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; vertical-align: top; }
     th { background: #f3f4f6; }
+    .warn { color: #c2410c; font-weight: 600; }
     button {
       appearance: none; border: 0; background: #0f172a; color: #fff;
       padding: .7rem 1rem; border-radius: 10px; cursor: pointer; font-weight: 600;
+      margin-right: .5rem;
+    }
+    a.secondary {
+      display: inline-block; padding: .7rem 1rem; border-radius: 10px;
+      background: #e2e8f0; color: #0f172a; text-decoration: none; font-weight: 600;
     }
     code { background: #f3f4f6; padding: .1rem .35rem; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>Demo: Notenübersicht (simuliertes SAL-HTML)</h1>
-  <p>Klicke den Button, um <code>dashboard.js</code> wie ein Bookmarklet zu laden.</p>
-  <button type="button" id="run">Dashboard laden / toggeln</button>
+  <h1>Demo: Aktuelle Noten (simuliertes Live-SAL)</h1>
+  <p>
+    <button type="button" id="run">Dashboard laden / toggeln</button>
+    <a class="secondary" href="/install.html">Bookmarklet installieren</a>
+  </p>
 
   <table>
     <thead>
-      <tr><th>Fach</th><th>Note</th></tr>
+      <tr>
+        <th>Kurs</th>
+        <th>Notendurchschnitt</th>
+        <th>Bestätigt</th>
+      </tr>
     </thead>
     <tbody>
-      <tr><td>Deutsch</td><td>5.0</td></tr>
-      <tr><td>Französisch</td><td>4.5</td></tr>
-      <tr><td>Englisch</td><td>5.5</td></tr>
-      <tr><td>Mathematik</td><td>4.5</td></tr>
-      <tr><td>Physik</td><td>5.0</td></tr>
-      <tr><td>Biologie</td><td>4.0</td></tr>
-      <tr><td>Sport</td><td>6.0</td></tr>
-      <tr><td>Musik</td><td>dispensiert</td></tr>
+      <tr><td>B-3Ed-MeC<br>Biologie</td><td>--</td><td>-</td></tr>
+      <tr><td>D-3Ed-DrM<br>Deutsch</td><td>--</td><td>-</td></tr>
+      <tr><td>E-3Ed-SaK<br>Englisch</td><td>5.750</td><td>✓</td></tr>
+      <tr><td>eaBO-3E4-BaG,PaT<br>Ergänzendes Angebot</td><td>--</td><td>-</td></tr>
+      <tr><td>F-3Ed-GuP<br>Französisch</td><td class="warn">3.500</td><td>✓</td></tr>
+      <tr><td>GG-3Ed-DrM<br>Geografie</td><td>5.750</td><td>✓</td></tr>
+      <tr><td>GS-3Ed-SaK<br>Geschichte</td><td>--</td><td>-</td></tr>
+      <tr><td>M-3Ed-GuP<br>Mathematik</td><td>5.500</td><td>✓</td></tr>
+      <tr><td>P-3Ed-MeC<br>Physik</td><td>--</td><td>-</td></tr>
+      <tr><td>wpfMU-3E1-ZuM<br>Wahlpflichtbereich Musik</td><td>5.100 *</td><td>✓</td></tr>
     </tbody>
   </table>
 

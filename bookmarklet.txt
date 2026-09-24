@@ -1,1 +1,5 @@
-javascript:(function(){var s=document.createElement('script');s.src='https://sal-noten-dashboard.vercel.app/dashboard.js?t='+Date.now();s.async=true;document.body.appendChild(s);})();
+https://sal-noten-dashboard.vercel.app/install.html
+
+WICHTIG: Nicht die javascript:-URL in die Adresszeile kleben.
+Stattdessen auf der Install-Seite den Button in die Lesezeichen-Leiste ziehen.
+(Das Portal blockiert oft externe Skripte – deshalb Inline-Bookmarklet.)

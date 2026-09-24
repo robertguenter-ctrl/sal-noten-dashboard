@@ -19,16 +19,22 @@
  *  3. Falls SAL gewichtete Einzelnoten zeigt: weightCellIndex setzen
  *     (sonst wird jede Zeile als fertige Fachnote gelesen).
  *
- * Beispiel (fiktiv):
- *   tableSelector:      '#notenuebersicht table, .noten-tabelle'
- *   rowSelector:        'tbody tr'
+ * Live SAL (portal.sbl.ch) – typische Spalten:
+ *   0 = Kurs (z. B. "E-3Ed-SaK" + Zeile "Englisch")
+ *   1 = Notendurchschnitt (z. B. "5.750", "5.100 *", "--")
+ *   2 = Bestätigt  ← NICHT als Note verwenden
+ *
+ *   tableSelector:      "table"
+ *   rowSelector:        "tbody tr, tr"
  *   subjectCellIndex:   0
- *   gradeCellIndex:     2
- *   weightCellIndex:    null   // oder 1, wenn eine Gewichtungs-Spalte existiert
+ *   gradeCellIndex:     1
+ *   weightCellIndex:    null
  * =============================================================================
  */
 (function () {
   "use strict";
+
+  try {
 
   // ── Konfiguration (Selektoren & Fach-Aliase) ──────────────────────────────
   const CONFIG = {
@@ -40,9 +46,12 @@
     /** Zeilen innerhalb einer Tabelle (ohne Header) */
     rowSelector: "tbody tr, tr",
 
-    /** Spaltenindizes (0-basiert). gradeCellIndex: -1 = letzte Zelle */
+    /**
+     * Spaltenindizes (0-basiert).
+     * Live SAL: 0=Kurs, 1=Notendurchschnitt, 2=Bestätigt
+     */
     subjectCellIndex: 0,
-    gradeCellIndex: -1,
+    gradeCellIndex: 1,
     weightCellIndex: null, // z. B. 1 – oder null, wenn keine Gewichtungsspalte
 
     /** Optionale explizite Zell-Selektoren (überschreiben Indizes, wenn gesetzt) */
@@ -54,9 +63,11 @@
     ignoreGradeTexts: [
       "",
       "-",
+      "--",
       "–",
       "—",
       ".",
+      "*",
       "dispensiert",
       "disp.",
       "n.b.",
@@ -64,6 +75,19 @@
       "keine note",
       "k.a.",
     ],
+
+    /**
+     * Live-SAL-Kurscodes am Zeilenanfang (vor dem ersten Bindestrich).
+     * z. B. E-3Ed-SaK → Englisch, P-3Ed-MeC → Physik
+     */
+    courseCodeMap: {
+      B: "Bio",
+      D: "D",
+      E: "E",
+      F: "F",
+      M: "M",
+      P: "Ph",
+    },
 
     /**
      * Promotionsrelevante Fächer (Niveau E) + Aliase für Namensmatching.
@@ -138,16 +162,20 @@
   }
 
   function isIgnoredGrade(text) {
-    const n = normalizeText(text);
+    const n = normalizeText(text).replace(/\*/g, "").trim();
+    if (!n || /^-+$/.test(n)) return true;
     return CONFIG.ignoreGradeTexts.some((t) => normalizeText(t) === n);
   }
 
-  /** Parst Noten wie "5.5", "5,5", "5 ½" → Number | null */
+  /** Parst Noten wie "5.5", "5,5", "5.750", "5.100 *" → Number | null */
   function parseGrade(raw) {
     if (raw == null) return null;
     let s = String(raw).trim();
+    // Icons/Buttons in derselben Zelle: nur den Notenteil betrachten
+    s = s.split(/\n/)[0].trim();
     if (isIgnoredGrade(s)) return null;
     s = s
+      .replace(/\*/g, "")
       .replace(/½/g, ".5")
       .replace(/,/g, ".")
       .replace(/[^\d.]/g, "");
@@ -174,25 +202,48 @@
   }
 
   function matchSubject(name) {
-    const n = normalizeText(name);
-    if (!n) return null;
-    // Fachkürzel am Anfang / in Klammern, z. B. "Mathematik (E)" / "D – Deutsch"
+    const raw = String(name || "").trim();
+    if (!raw) return null;
+
+    // Live SAL: "E-3Ed-SaK" / "Englisch" (oft zweizeilig in einer Zelle)
+    const codeHit = raw.match(/^([A-Za-z]+)\s*-/);
+    if (codeHit) {
+      const mappedKey = CONFIG.courseCodeMap[codeHit[1].toUpperCase()];
+      if (mappedKey) {
+        const byCode = CONFIG.subjects.find((s) => s.key === mappedKey);
+        if (byCode) return byCode;
+      }
+    }
+
+    const n = normalizeText(raw);
+    // Fachname in der Zelle (z. B. zweite Zeile "Englisch")
+    for (const sub of CONFIG.subjects) {
+      if (n.includes(normalizeText(sub.label))) return sub;
+    }
     for (const sub of CONFIG.subjects) {
       for (const alias of sub.aliases) {
         const a = normalizeText(alias);
+        // Kurze Aliase (d/e/f/m) nur als ganzes Token, nicht als Prefix von "englisch"
+        if (a.length <= 2) {
+          if (
+            new RegExp("(^|\\s|/)" + a + "(\\s|/|$|\\(|-)", "i").test(n) &&
+            !/^[a-z]+-\d/i.test(raw)
+          ) {
+            return sub;
+          }
+          continue;
+        }
         if (
           n === a ||
           n.startsWith(a + " ") ||
           n.startsWith(a + "(") ||
           n.startsWith(a + "-") ||
           n.startsWith(a + "–") ||
-          n.includes("(" + a + ")") ||
-          new RegExp("(^|\\s|/)" + a + "(\\s|/|$|\\()", "i").test(n)
+          n.includes("(" + a + ")")
         ) {
           return sub;
         }
       }
-      if (n.includes(normalizeText(sub.label))) return sub;
     }
     return null;
   }
@@ -815,4 +866,9 @@
   const subjects = extractGrades();
   const data = computePromotion(subjects);
   render(data);
+
+  } catch (err) {
+    console.error("[SAL Noten-Dashboard]", err);
+    alert("SAL Noten-Dashboard Fehler: " + (err && err.message ? err.message : err));
+  }
 })();
