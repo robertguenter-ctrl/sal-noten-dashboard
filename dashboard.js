@@ -77,6 +77,24 @@
     ],
 
     /**
+     * Nur Tabellen mit diesen Header-Stichworten (Live-SAL-Übersicht).
+     * Verhindert, dass Einzelprüfungen / andere Listen mitgemischt werden.
+     */
+    preferTableHeaderHints: ["notendurchschnitt", "aktuelle noten"],
+
+    /**
+     * true = nur Zeilen mit SAL-Kurscode (z. B. E-3Ed-SaK), keine losen Namens-Treffer.
+     * Verhindert Falsch-Zuordnung aus Detailtabellen.
+     */
+    requireCourseCode: true,
+
+    /**
+     * Pro Fach nur den ersten Treffer aus der Übersichtstabelle behalten
+     * (kein Mittelwert über mehrere Tabellen/Prüfungen).
+     */
+    oneGradePerSubject: true,
+
+    /**
      * Live-SAL-Kurscodes am Zeilenanfang (vor dem ersten Bindestrich).
      * z. B. E-3Ed-SaK → Englisch, P-3Ed-MeC → Physik
      */
@@ -201,7 +219,8 @@
     return Math.round(value * 100) / 100;
   }
 
-  function matchSubject(name) {
+  function matchSubject(name, opts) {
+    const requireCode = opts && opts.requireCourseCode;
     const raw = String(name || "").trim();
     if (!raw) return null;
 
@@ -213,6 +232,10 @@
         const byCode = CONFIG.subjects.find((s) => s.key === mappedKey);
         if (byCode) return byCode;
       }
+      // Anderer Kurscode (GG, eaBO, wpf…): kein Fach-Match über den Namen
+      if (requireCode) return null;
+    } else if (requireCode) {
+      return null;
     }
 
     const n = normalizeText(raw);
@@ -259,11 +282,53 @@
     return cells[i] ? cells[i].textContent : "";
   }
 
+  /** Header-Text einer Tabelle (für Übersicht vs. Detail) */
+  function tableHeaderText(table) {
+    const parts = [];
+    table.querySelectorAll("th").forEach((th) => parts.push(th.textContent || ""));
+    const caption = table.querySelector("caption");
+    if (caption) parts.push(caption.textContent || "");
+    // Überschrift direkt vor der Tabelle (h1–h3, .title, …)
+    let prev = table.previousElementSibling;
+    for (let i = 0; i < 3 && prev; i++, prev = prev.previousElementSibling) {
+      parts.push(prev.textContent || "");
+    }
+    return normalizeText(parts.join(" "));
+  }
+
+  function scoreOverviewTable(table) {
+    const header = tableHeaderText(table);
+    let score = 0;
+    for (const hint of CONFIG.preferTableHeaderHints) {
+      if (header.includes(normalizeText(hint))) score += 10;
+    }
+    // Typische Live-SAL-Kurszeilen zählen
+    const rows = table.querySelectorAll(CONFIG.rowSelector);
+    let courseRows = 0;
+    rows.forEach((row) => {
+      const subjectRaw = cellText(row, CONFIG.subjectCellIndex, CONFIG.subjectCellSelector);
+      if (/^[A-Za-z]{1,6}\s*-\d/.test(String(subjectRaw).trim())) courseRows += 1;
+    });
+    score += Math.min(courseRows, 20);
+    return score;
+  }
+
+  function pickTables() {
+    const all = Array.from(document.querySelectorAll(CONFIG.tableSelector));
+    if (!all.length) return [];
+    const ranked = all
+      .map((table) => ({ table, score: scoreOverviewTable(table) }))
+      .sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    // Nur die beste Übersichtstabelle – keine weiteren mischen
+    if (best && best.score > 0) return [best.table];
+    return all.slice(0, 1);
+  }
+
   // ── Noten auslesen ────────────────────────────────────────────────────────
   /**
-   * Sammelt Rohnoten pro Fach.
-   * - Mit weightCellIndex: gewichtete Einzelnoten → Schnitt → kaufm. runden
-   * - Ohne: eine Note pro Fachzeile (bereits Zeugnisnote)
+   * Liest die Live-SAL-Übersicht «Aktuelle Noten»:
+   * pro promotionsrelevantem Fach genau eine Zeile (Kurscode + Notendurchschnitt).
    */
   function extractGrades() {
     const buckets = Object.create(null);
@@ -271,7 +336,7 @@
       buckets[sub.key] = { meta: sub, entries: [] };
     }
 
-    const tables = document.querySelectorAll(CONFIG.tableSelector);
+    const tables = pickTables();
     tables.forEach((table) => {
       const rows = table.querySelectorAll(CONFIG.rowSelector);
       rows.forEach((row) => {
@@ -288,10 +353,16 @@
           CONFIG.gradeCellIndex,
           CONFIG.gradeCellSelector
         );
-        const matched = matchSubject(subjectRaw);
+        const matched = matchSubject(subjectRaw, {
+          requireCourseCode: CONFIG.requireCourseCode,
+        });
         if (!matched) return;
 
+        // Bereits eine Übersichtszelle für dieses Fach? Nicht überschreiben/mischen
+        if (CONFIG.oneGradePerSubject && buckets[matched.key].entries.length) return;
+
         const grade = parseGrade(gradeRaw);
+        // "--" zählt als "gefunden, aber keine Note" → kein Entry
         if (grade == null) return;
 
         let weight = 1;
@@ -304,7 +375,12 @@
           weight = parseWeight(weightRaw);
         }
 
-        buckets[matched.key].entries.push({ grade, weight, rawSubject: subjectRaw.trim() });
+        buckets[matched.key].entries.push({
+          grade,
+          weight,
+          rawSubject: subjectRaw.trim(),
+          rawGrade: String(gradeRaw).trim().split(/\n/)[0].trim(),
+        });
       });
     });
 
@@ -319,7 +395,7 @@
         };
       }
 
-      // Gewichteter Schnitt aller gefundenen Noten dieses Fachs
+      // Übersicht: i. d. R. eine Note = Notendurchschnitt → kaufmännisch auf ½ runden
       let sum = 0;
       let wSum = 0;
       for (const e of entries) {
@@ -327,13 +403,13 @@
         wSum += e.weight;
       }
       const weighted = wSum > 0 ? sum / wSum : null;
-      // Kaufmännisch auf halbe Note runden → Zeugnisnote
       const rounded = weighted == null ? null : roundHalfGrade(weighted);
 
       return {
         ...sub,
         grade: rounded,
         weightedRaw: weighted,
+        liveAverage: entries[0].grade,
         found: true,
         entryCount: entries.length,
       };
@@ -759,11 +835,15 @@
         const ok = grade != null && grade >= CONFIG.threshold;
         const pillClass = missing ? "missing" : ok ? "ok" : "fail";
         const weightHint = meta.doubleWeight ? "doppelt gewichtet" : "einfach gewichtet";
+        const liveHint =
+          s && s.liveAverage != null
+            ? ` · Live ${fmt(s.liveAverage, 3)} → ${fmt(grade, 1)}`
+            : "";
         return `
           <li class="snd-item">
             <div class="name">
               <strong>${meta.label}</strong>
-              <small>${weightHint}${s && s.entryCount > 1 ? ` · ${s.entryCount} Noten` : ""}</small>
+              <small>${weightHint}${liveHint}</small>
             </div>
             <div class="snd-grade-pill ${pillClass}">${missing ? "–" : fmt(grade, 1)}</div>
           </li>`;
