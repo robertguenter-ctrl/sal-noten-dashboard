@@ -150,11 +150,24 @@
       },
     ],
 
-    /** Schwellen für Übertritt aus Leistungszug E (BL) */
+    /** Plus/Minus-Schwelle (Beförderung / Kompensation) – für E und P gleich 4.0 */
     threshold: 4.0,
-    tracks: {
-      fms: { label: "FMS", minAverage: 4.5, minPoints: 36.5 },
-      gym: { label: "Gymnasium", minAverage: 5.0, minPoints: 40.5 },
+
+    /**
+     * Übertrittsschwellen nach Leistungszug (Laufbahnverordnung BL, ab 01.08.2025).
+     * Erkennung aus Klassencode neben dem Namen, z. B. "(3Ed)" → E, "(2Pa)" → P.
+     */
+    levelProfiles: {
+      E: {
+        label: "Zug E",
+        fms: { label: "FMS", minAverage: 4.5, minPoints: 36.5 },
+        gym: { label: "Gymnasium", minAverage: 5.0, minPoints: 40.5 },
+      },
+      P: {
+        label: "Zug P",
+        fms: { label: "FMS", minAverage: 4.0, minPoints: 32.5 },
+        gym: { label: "Gymnasium", minAverage: 4.0, minPoints: 34.5 },
+      },
     },
 
     /** Max. erlaubte Noten unter Schwellwert (BL: höchstens 3) */
@@ -217,6 +230,64 @@
 
   function round2(value) {
     return Math.round(value * 100) / 100;
+  }
+
+  /**
+   * Ermittelt Leistungszug E/P aus Klassencode.
+   * Beispiele: "Aktuelle Noten - Name (3Ed)" → E; Kurs "M-2Pa-XyZ" → P.
+   */
+  function detectLevel() {
+    const candidates = [];
+    const pushFromText = (text, source) => {
+      const s = String(text || "");
+      // "(3Ed)", "(2Pa)", "(1En)"
+      const paren = s.match(/\((\d)\s*([EP])([a-z0-9]*)\)/i);
+      if (paren) {
+        candidates.push({
+          code: paren[2].toUpperCase(),
+          classCode: paren[1] + paren[2].toUpperCase() + (paren[3] || ""),
+          source,
+          score: 100,
+        });
+      }
+      // Kurszeile: "E-3Ed-SaK" / "B-2Pd-MeC" (Track steckt in der Klassenkennung)
+      const course = s.match(/-\s*(\d)([EP])([a-z])\b/i);
+      if (course) {
+        candidates.push({
+          code: course[2].toUpperCase(),
+          classCode: course[1] + course[2].toUpperCase() + course[3],
+          source,
+          score: 40,
+        });
+      }
+    };
+
+    document
+      .querySelectorAll("h1, h2, h3, .page-title, .content h1, .content h2, title")
+      .forEach((el) => pushFromText(el.textContent, "Titel/Überschrift"));
+
+    // Fallback: ganze Seite (nur Klassenmuster in Klammern bevorzugen)
+    pushFromText(document.body ? document.body.innerText.slice(0, 4000) : "", "Seiteninhalt");
+
+    candidates.sort((a, b) => b.score - a.score);
+    if (candidates.length) {
+      return {
+        code: candidates[0].code,
+        classCode: candidates[0].classCode,
+        source: candidates[0].source,
+        auto: true,
+      };
+    }
+    return {
+      code: "E",
+      classCode: null,
+      source: "Standard (nicht erkannt)",
+      auto: false,
+    };
+  }
+
+  function getProfile(levelCode) {
+    return CONFIG.levelProfiles[levelCode] || CONFIG.levelProfiles.E;
   }
 
   function matchSubject(name, opts) {
@@ -417,7 +488,9 @@
   }
 
   // ── Promotionsberechnung ──────────────────────────────────────────────────
-  function computePromotion(subjects) {
+  function computePromotion(subjects, levelCode) {
+    const profile = getProfile(levelCode);
+    const trackDefs = { fms: profile.fms, gym: profile.gym };
     const present = subjects.filter((s) => s.found && s.grade != null);
     const missing = subjects.filter((s) => !s.found || s.grade == null);
     const complete = missing.length === 0 && present.length === CONFIG.subjects.length;
@@ -450,8 +523,8 @@
         insufficient: null,
         plusMinusOk: false,
         countOk: false,
-        fms: emptyTrack(CONFIG.tracks.fms),
-        gym: emptyTrack(CONFIG.tracks.gym),
+        fms: emptyTrack(trackDefs.fms),
+        gym: emptyTrack(trackDefs.gym),
       };
     }
 
@@ -529,8 +602,8 @@
       insufficient,
       plusMinusOk,
       countOk,
-      fms: trackStatus(CONFIG.tracks.fms),
-      gym: trackStatus(CONFIG.tracks.gym),
+      fms: trackStatus(trackDefs.fms),
+      gym: trackStatus(trackDefs.gym),
     };
   }
 
@@ -605,6 +678,47 @@
   margin: 4px 0 0;
   color: var(--snd-muted);
   font-size: 12px;
+}
+#${CONFIG.rootId} .snd-level-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(31,41,55,.85);
+  border: 1px solid var(--snd-border);
+}
+#${CONFIG.rootId} .snd-level-bar .meta {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12px;
+  color: var(--snd-muted);
+}
+#${CONFIG.rootId} .snd-level-bar strong { color: var(--snd-text); }
+#${CONFIG.rootId} .snd-level-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(15,23,42,.55);
+}
+#${CONFIG.rootId} .snd-level-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--snd-muted);
+  font: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#${CONFIG.rootId} .snd-level-toggle button.active {
+  background: rgba(56,189,248,.18);
+  color: var(--snd-accent);
 }
 #${CONFIG.rootId} .snd-close {
   appearance: none;
@@ -836,6 +950,11 @@
 
     const incomplete = !data.complete;
     const missingNames = (data.missing || []).map((s) => s.label).join(", ");
+    const levelMeta = data.levelInfo || { code: "E", classCode: null, source: "", auto: false };
+    const profile = getProfile(levelMeta.code);
+    const levelHint = levelMeta.classCode
+      ? `Klassencode «${levelMeta.classCode}»`
+      : levelMeta.source || "manuell";
 
     const overallLevel = incomplete
       ? "warn"
@@ -889,8 +1008,21 @@
       })
       .join("");
 
+    const levelBar = `
+          <div class="snd-level-bar">
+            <div class="meta">
+              Aktiv: <strong>${profile.label}</strong>
+              <br>${levelMeta.manual ? "manuell gewählt" : "erkannt aus " + levelHint}
+            </div>
+            <div class="snd-level-toggle" role="group" aria-label="Leistungszug">
+              <button type="button" data-snd-level="E" class="${levelMeta.code === "E" ? "active" : ""}">E</button>
+              <button type="button" data-snd-level="P" class="${levelMeta.code === "P" ? "active" : ""}">P</button>
+            </div>
+          </div>`;
+
     const statsBlock = incomplete
       ? `
+          ${levelBar}
           <div class="snd-empty">
             Kennzahlen erscheinen erst, wenn alle <strong>6 Promotionsfächer</strong> eine Note haben.
             ${
@@ -901,6 +1033,7 @@
             <br><br>Bisher ${data.subjects.length} von 6 Noten vorhanden – siehe Liste unten.
           </div>`
       : `
+          ${levelBar}
           <div class="snd-stats">
             <div class="snd-stat">
               <div class="snd-stat-label">Notenschnitt</div>
@@ -910,7 +1043,7 @@
             <div class="snd-stat">
               <div class="snd-stat-label">Status</div>
               <div style="margin-top:6px"><span class="snd-badge ${overallLevel}">${overallLabel}</span></div>
-              <div class="snd-stat-hint">Ampel gemäss BL-Regeln</div>
+              <div class="snd-stat-hint">Ampel gemäss BL-Regeln (${profile.label})</div>
             </div>
             <div class="snd-stat">
               <div class="snd-stat-label">Ungenügend (&lt; ${fmt(CONFIG.threshold, 1)})</div>
@@ -936,7 +1069,7 @@
           </div>
 
           <section class="snd-section">
-            <h3>Übertritt (Zug E)</h3>
+            <h3>Übertritt (${profile.label})</h3>
             ${["fms", "gym"]
               .map((key) => {
                 const t = data[key];
@@ -963,7 +1096,7 @@
         <header class="snd-header">
           <div>
             <h2 class="snd-title">Noten-Dashboard</h2>
-            <p class="snd-sub">Sekundarschule BL · Promotionsfächer (Zug E)</p>
+            <p class="snd-sub">Sekundarschule BL · Promotionsfächer · ${profile.label}</p>
           </div>
           <button type="button" class="snd-close" aria-label="Schliessen" data-snd-close>✕</button>
         </header>
@@ -976,8 +1109,8 @@
           </section>
 
           <p class="snd-footer">
-            Je Fach: Notendurchschnitt aus der Übersicht → kaufmännische Rundung auf ½-Note → danach Durchschnitt &amp; Punkte (erst mit allen 6 Noten).
-            ESC oder ✕ schliesst das Overlay. Erneuter Bookmarklet-Klick toggelt.
+            Schwellen Zug E: FMS 4.5 / 36.5 · Gym 5.0 / 40.5 — Zug P: FMS 4.0 / 32.5 · Gym 4.0 / 34.5.
+            Kennzahlen erst mit allen 6 Noten. ESC oder ✕ schliesst. Erneuter Klick toggelt.
           </p>
         </div>
       </aside>
@@ -987,12 +1120,38 @@
     root.querySelectorAll("[data-snd-close]").forEach((el) => {
       el.addEventListener("click", closeDashboard);
     });
+    root.querySelectorAll("[data-snd-level]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = btn.getAttribute("data-snd-level");
+        if (!next || next === levelMeta.code) return;
+        window.__salDashLevelOverride = next;
+        showDashboard(next, true);
+      });
+    });
     document.addEventListener("keydown", onEscClose, true);
   }
 
-  const subjects = extractGrades();
-  const data = computePromotion(subjects);
-  render(data);
+  function showDashboard(levelCode, manual) {
+    const detected = detectLevel();
+    const code = levelCode || window.__salDashLevelOverride || detected.code;
+    const data = computePromotion(cachedSubjects, code);
+    data.levelInfo = {
+      code: code,
+      classCode: detected.classCode,
+      source: detected.source,
+      auto: detected.auto,
+      manual: !!manual || (!!window.__salDashLevelOverride && window.__salDashLevelOverride !== detected.code),
+    };
+    const prev = document.getElementById(CONFIG.rootId);
+    if (prev) prev.remove();
+    const prevStyles = document.getElementById(CONFIG.rootId + "-styles");
+    if (prevStyles) prevStyles.remove();
+    document.removeEventListener("keydown", onEscClose, true);
+    render(data);
+  }
+
+  const cachedSubjects = extractGrades();
+  showDashboard(null, false);
 
   } catch (err) {
     console.error("[SAL Noten-Dashboard]", err);
