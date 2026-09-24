@@ -119,6 +119,12 @@
         aliases: ["deutsch", "d", "deu", "german"],
       },
       {
+        key: "M",
+        label: "Mathematik",
+        doubleWeight: true,
+        aliases: ["mathematik", "mathe", "math", "m", "mat"],
+      },
+      {
         key: "F",
         label: "Französisch",
         doubleWeight: false,
@@ -131,22 +137,16 @@
         aliases: ["englisch", "english", "e", "eng"],
       },
       {
-        key: "M",
-        label: "Mathematik",
-        doubleWeight: true,
-        aliases: ["mathematik", "mathe", "math", "m", "mat"],
+        key: "Bio",
+        label: "Biologie",
+        doubleWeight: false,
+        aliases: ["biologie", "biology", "bio", "bi"],
       },
       {
         key: "Ph",
         label: "Physik",
         doubleWeight: false,
         aliases: ["physik", "physics", "ph", "phy"],
-      },
-      {
-        key: "Bio",
-        label: "Biologie",
-        doubleWeight: false,
-        aliases: ["biologie", "biology", "bio", "bi"],
       },
     ],
 
