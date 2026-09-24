@@ -420,12 +420,43 @@
   function computePromotion(subjects) {
     const present = subjects.filter((s) => s.found && s.grade != null);
     const missing = subjects.filter((s) => !s.found || s.grade == null);
+    const complete = missing.length === 0 && present.length === CONFIG.subjects.length;
+
+    const emptyTrack = (track) => ({
+      ...track,
+      avgOk: false,
+      pointsOk: false,
+      plusMinusOk: false,
+      countOk: false,
+      entryOk: false,
+      promoOk: false,
+      level: "warn",
+      statusLabel: "Unvollständig",
+    });
+
+    // Offizielle Kennzahlen erst mit allen 6 Fachnoten – sonst irreführend
+    if (!complete) {
+      return {
+        allSubjects: subjects,
+        subjects: present,
+        missing,
+        complete: false,
+        average: null,
+        points: null,
+        pointSlots: 0,
+        maxPoints: 0,
+        plus: null,
+        minus: null,
+        insufficient: null,
+        plusMinusOk: false,
+        countOk: false,
+        fms: emptyTrack(CONFIG.tracks.fms),
+        gym: emptyTrack(CONFIG.tracks.gym),
+      };
+    }
 
     // Durchschnitt der (gerundeten) Fachnoten – promotionsrelevante Fächer
-    const avg =
-      present.length > 0
-        ? round2(present.reduce((a, s) => a + s.grade, 0) / present.length)
-        : null;
+    const avg = round2(present.reduce((a, s) => a + s.grade, 0) / present.length);
 
     // Punktesumme: D und M doppelt
     let points = 0;
@@ -453,21 +484,21 @@
     plus = round2(plus);
     minus = round2(minus);
 
-    // BL: Pluspunkte >= 2 × Minuspunkte  ⇔  Minus darf Plus nicht um mehr als das Doppelte «übersteigen» im Sinne der Verordnung
+    // BL: Pluspunkte >= 2 × Minuspunkte
     const plusMinusOk = minus === 0 || plus >= 2 * minus;
     const countOk = insufficient <= CONFIG.maxInsufficient;
 
     function trackStatus(track) {
-      const avgOk = avg != null && avg >= track.minAverage;
+      const avgOk = avg >= track.minAverage;
       const pointsOk = points >= track.minPoints;
       const entryOk = avgOk && pointsOk;
       const promoOk = entryOk && plusMinusOk && countOk;
-      let level = "fail"; // rot
+      let level = "fail";
       let label = "Nicht erfüllt";
       if (promoOk) {
         level = "ok";
         label = "Auf Kurs";
-      } else if (avgOk || pointsOk || (plusMinusOk && countOk && avg != null && avg >= thr)) {
+      } else if (avgOk || pointsOk || (plusMinusOk && countOk && avg >= thr)) {
         level = "warn";
         label = "Gefährdet";
       }
@@ -485,8 +516,10 @@
     }
 
     return {
+      allSubjects: subjects,
       subjects: present,
       missing,
+      complete: true,
       average: avg,
       points,
       pointSlots,
@@ -801,19 +834,22 @@
   function render(data) {
     injectStyles();
 
-    const overallLevel =
-      data.gym.level === "ok"
+    const incomplete = !data.complete;
+    const missingNames = (data.missing || []).map((s) => s.label).join(", ");
+
+    const overallLevel = incomplete
+      ? "warn"
+      : data.gym.level === "ok"
         ? "ok"
         : data.fms.level === "ok" || data.fms.level === "warn" || data.gym.level === "warn"
           ? data.gym.level === "ok" || data.fms.level === "ok"
             ? "ok"
             : "warn"
-          : data.average == null
-            ? "warn"
-            : "fail";
+          : "fail";
 
-    const overallLabel =
-      data.gym.promoOk
+    const overallLabel = incomplete
+      ? "Unvollständig"
+      : data.gym.promoOk
         ? "Auf Kurs (Gym)"
         : data.fms.promoOk
           ? "Auf Kurs (FMS)"
@@ -827,18 +863,21 @@
     root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", "SAL Noten-Dashboard");
 
+    const subjectSource = data.allSubjects || data.subjects;
     const subjectRows = CONFIG.subjects
       .map((meta) => {
-        const s = data.subjects.find((x) => x.key === meta.key);
-        const missing = !s;
-        const grade = s ? s.grade : null;
+        const s = subjectSource.find((x) => x.key === meta.key);
+        const missing = !s || !s.found || s.grade == null;
+        const grade = missing ? null : s.grade;
         const ok = grade != null && grade >= CONFIG.threshold;
         const pillClass = missing ? "missing" : ok ? "ok" : "fail";
         const weightHint = meta.doubleWeight ? "doppelt gewichtet" : "einfach gewichtet";
         const liveHint =
-          s && s.liveAverage != null
+          !missing && s.liveAverage != null
             ? ` · Live ${fmt(s.liveAverage, 3)} → ${fmt(grade, 1)}`
-            : "";
+            : missing
+              ? " · noch keine Note"
+              : "";
         return `
           <li class="snd-item">
             <div class="name">
@@ -850,23 +889,18 @@
       })
       .join("");
 
-    root.innerHTML = `
-      <div class="snd-backdrop" data-snd-close></div>
-      <aside class="snd-drawer">
-        <header class="snd-header">
-          <div>
-            <h2 class="snd-title">Noten-Dashboard</h2>
-            <p class="snd-sub">Sekundarschule BL · Promotionsfächer (Zug E)</p>
-          </div>
-          <button type="button" class="snd-close" aria-label="Schliessen" data-snd-close>✕</button>
-        </header>
-        <div class="snd-body">
-          ${
-            data.average == null
-              ? `<div class="snd-empty">Keine promotionsrelevanten Noten gefunden. Prüfe die Selektoren im Kommentarblock von <code>dashboard.js</code>.</div>`
-              : ""
-          }
-
+    const statsBlock = incomplete
+      ? `
+          <div class="snd-empty">
+            Kennzahlen erscheinen erst, wenn alle <strong>6 Promotionsfächer</strong> eine Note haben.
+            ${
+              missingNames
+                ? `<br><br>Noch offen: <strong>${missingNames}</strong>`
+                : ""
+            }
+            <br><br>Bisher ${data.subjects.length} von 6 Noten vorhanden – siehe Liste unten.
+          </div>`
+      : `
           <div class="snd-stats">
             <div class="snd-stat">
               <div class="snd-stat-label">Notenschnitt</div>
@@ -921,7 +955,20 @@
                 </div>`;
               })
               .join("")}
-          </section>
+          </section>`;
+
+    root.innerHTML = `
+      <div class="snd-backdrop" data-snd-close></div>
+      <aside class="snd-drawer">
+        <header class="snd-header">
+          <div>
+            <h2 class="snd-title">Noten-Dashboard</h2>
+            <p class="snd-sub">Sekundarschule BL · Promotionsfächer (Zug E)</p>
+          </div>
+          <button type="button" class="snd-close" aria-label="Schliessen" data-snd-close>✕</button>
+        </header>
+        <div class="snd-body">
+          ${statsBlock}
 
           <section class="snd-section">
             <h3>Promotionsfächer</h3>
@@ -929,7 +976,7 @@
           </section>
 
           <p class="snd-footer">
-            Je Fach: gewichteter Schnitt → kaufmännische Rundung auf ½-Note → danach Durchschnitt &amp; Punkte.
+            Je Fach: Notendurchschnitt aus der Übersicht → kaufmännische Rundung auf ½-Note → danach Durchschnitt &amp; Punkte (erst mit allen 6 Noten).
             ESC oder ✕ schliesst das Overlay. Erneuter Bookmarklet-Klick toggelt.
           </p>
         </div>
